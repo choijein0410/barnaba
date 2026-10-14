@@ -1,0 +1,66 @@
+name: PR63 upstream versus patch
+on:
+  push:
+    branches: [validation/pr63-ci-baseline-20261014]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - python: '3.8.18'
+            series: '3.8'
+          - python: '3.9.25'
+            series: '3.9'
+          - python: '3.10.22'
+            series: '3.10'
+    steps:
+      - uses: actions/checkout@a37ce9120846195fa4ece8f58b268e6043cb2f26
+        with:
+          path: audit
+          persist-credentials: false
+      - uses: actions/checkout@a37ce9120846195fa4ece8f58b268e6043cb2f26
+        with:
+          repository: choijein0410/barnaba
+          ref: af4d60a0ea37cf85acb51d1917be68effb40a3ce
+          path: source
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-python@7f4fc3e22c37d6ff65e88745f38bd3157c663f7c
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Run paired comparison with original CI package versions
+        run: python audit/compare.py '${{ matrix.series }}'
+      - name: Preserve logs, package versions, source hashes, and JUnit results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: comparison-${{ matrix.series }}
+          path: results/
+          retention-days: 30
+          if-no-files-found: error
+  python37-baseline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@a37ce9120846195fa4ece8f58b268e6043cb2f26
+        with:
+          repository: choijein0410/barnaba
+          ref: 48ac4a9496c68fc48698f65c5e0d9563761681ec
+          persist-credentials: false
+      - id: python37
+        continue-on-error: true
+        uses: actions/setup-python@7f4fc3e22c37d6ff65e88745f38bd3157c663f7c
+        with:
+          python-version: '3.7'
+      - name: Record expected setup failure on unmodified upstream
+        env:
+          SETUP_OUTCOME: ${{ steps.python37.outcome }}
+        run: |
+          echo "Python 3.7 setup on upstream: $SETUP_OUTCOME"
+          test "$SETUP_OUTCOME" = failure
